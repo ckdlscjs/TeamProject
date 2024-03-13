@@ -9,8 +9,6 @@
 
 
 ### MRT
-![image](https://user-images.githubusercontent.com/40855235/234498775-cdb615fc-b65a-497e-924f-484217d67b01.png)
-
 
 
 ### AI FSM
