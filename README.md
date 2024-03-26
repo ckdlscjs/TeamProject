@@ -19,6 +19,7 @@
 - FMOD
 
 ## 역할
+![Untitled](https://prod-files-secure.s3.us-west-2.amazonaws.com/2c037e11-5d69-451f-8557-93550e6a2b52/d5b82d7e-a766-4e29-959d-a01094485dc8/Untitled.png)
 - **MapTool, Map**
     - **LandScape**
         - **Frustum Culling**을 통한 Rendering최적화
@@ -34,9 +35,8 @@
     - **Fog**
         - 플레이어의 좌표를 기준으로 하는 거리Fog 구현, 이를 프로젝트 렌더링 엔진의
         **MRT에 사용하여 최종 SRV**에 안개 적용
-    
-    ![Untitled](https://prod-files-secure.s3.us-west-2.amazonaws.com/2c037e11-5d69-451f-8557-93550e6a2b52/b4085bb7-0061-40c1-ac4a-3217cde50c1e/Untitled.png)
-    
+          
+ ![Untitled](https://prod-files-secure.s3.us-west-2.amazonaws.com/2c037e11-5d69-451f-8557-93550e6a2b52/b4085bb7-0061-40c1-ac4a-3217cde50c1e/Untitled.png)
 - **UI**
     - **Fade In, Out / Gage**
         - Frame당 **Vertex의 R,G,B,A** 값을 조절해 Shader에서 사용
