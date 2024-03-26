@@ -1,7 +1,5 @@
 # DirectX 3D Team Project : LolShinSouls
-
-![234498154-ffaa7cd6-9bbb-4f14-b423-c42b302dc000.PNG](https://postfiles.pstatic.net/MjAyNDAyMDlfMTkx/MDAxNzA3NDczODQ0Mzg3.R-OnPPhk45OirD-AtXJuGcIA9oFXtQXoYxDBV6-xBKcg.68hipY759BXn9Z5ya-fWH7sv6OXCKpR8jlahN_cuqHMg.PNG.sinsin63/234498154-ffaa7cd6-9bbb-4f14-b423-c42b302dc000.png?type=w580)
-
+![dx_4](https://github.com/ckdlscjs/TeamProject/assets/41976800/ffcd1bc5-122f-40b8-a9c3-d4287dbf065f)
 ## 개요
 - 장르
     - 3D RPG
@@ -17,7 +15,7 @@
 - FMOD
 
 ## 역할
-![dx_4](https://github.com/ckdlscjs/TeamProject/assets/41976800/ffcd1bc5-122f-40b8-a9c3-d4287dbf065f)
+![Untitled](https://github.com/ckdlscjs/TeamProject/assets/41976800/a4ed9c9e-fc8b-4c57-b4db-3d61b6a8cb14)
 - **MapTool, Map**
     - **LandScape**
         - **Frustum Culling**을 통한 Rendering최적화
