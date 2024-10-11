@@ -50,7 +50,7 @@
         - 가우시안값, AlphaMapWeight을 통해 **가중치에 따른 SRV의 Blur** 구현
 
 ## 동영상
-https://youtu.be/4ECHTmTD6h4?si=qe3qtL75Kr7zCrz7 (LoLShinSouls)
+https://youtu.be/4ECHTmTD6h4?si=qe3qtL75Kr7zCrz7 (LoLShinSouls) </br>
 https://youtu.be/_ik09B4ptmo?si=l5gQW1pp_IqxO2Hu (MapTools)
 ## 다운로드
 http://naver.me/55RIqKpf (게임)
