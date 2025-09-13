@@ -13,6 +13,25 @@
 - DirectX
 - FBX SDK
 - FMOD
+''' c++
+#pragma once
+#include "Object.h"
+
+class Foliage : public Object
+{
+public:
+	bool Frame() override;
+	virtual bool PreRender() override;
+	bool Render() override;
+
+public:
+	Foliage(std::string szFullPath, std::vector<InstanceData>* pListInstanceData, ID3D11Device* pDevice, ID3D11DeviceContext* pDeviceContext);
+	virtual ~Foliage();
+public:
+	std::vector<InstanceData> m_ListInstanceData;
+	ID3D11Buffer* m_pInstanceBuffer = nullptr;
+};
+'''
 
 ## 역할
 ![Untitled](https://github.com/ckdlscjs/TeamProject/assets/41976800/a4ed9c9e-fc8b-4c57-b4db-3d61b6a8cb14)
