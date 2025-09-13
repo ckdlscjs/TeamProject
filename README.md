@@ -13,7 +13,7 @@
 - DirectX
 - FBX SDK
 - FMOD
-''' c++
+``` c++
 #pragma once
 #include "Object.h"
 
@@ -31,7 +31,7 @@ public:
 	std::vector<InstanceData> m_ListInstanceData;
 	ID3D11Buffer* m_pInstanceBuffer = nullptr;
 };
-'''
+```
 
 ## 역할
 ![Untitled](https://github.com/ckdlscjs/TeamProject/assets/41976800/a4ed9c9e-fc8b-4c57-b4db-3d61b6a8cb14)
