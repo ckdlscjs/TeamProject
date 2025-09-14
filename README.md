@@ -76,9 +76,10 @@ F_POSITION Frustum::ClassifyBox(T_BOX v)
 			}*/
 	}
 	return t_Position;
-}```
+}
+```
+- **Collider ObbBox, FbxMesh**의 **RayCast**를 이용한 충돌 구현
 
-        - **Collider ObbBox, FbxMesh**의 **RayCast**를 이용한 충돌 구현
     - **FBXObject**
         - FBXSDK를 통해 리소스를 로드, **Vertex를 Index**로 구축하는 알고리즘을 구현해 최적화
         - 로드된 객체는 **Singleton Manager**에서 관리
