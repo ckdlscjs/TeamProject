@@ -31,6 +31,8 @@
     - **Fog**
         - 플레이어의 좌표를 기준으로 하는 거리Fog 구현, 이를 프로젝트 렌더링 엔진의
         **MRT에 사용하여 최종 SRV**에 안개 적용
+    - **Foliage**
+    	- 인스턴싱을 활용한 렌더링으로 맵전체에 잔디(폴리지)구현 
           
  ![Untitled2](https://github.com/ckdlscjs/TeamProject/assets/41976800/a7b14cf1-81f3-4bc0-afc0-592d8eab7d8e)
 - **UI**
