@@ -19,6 +19,65 @@
 - **MapTool, Map**
     - **LandScape**
         - **Frustum Culling**을 통한 Rendering최적화
+```c++
+F_POSITION Frustum::ClassifyPoint(XMVECTOR v)
+{
+	for (int iPlane = 0; iPlane < 6; iPlane++)
+	{
+		float fDistance =
+			m_Plane[iPlane].a * XMVectorGetX(v) +
+			m_Plane[iPlane].b * XMVectorGetY(v) +
+			m_Plane[iPlane].c * XMVectorGetZ(v) +
+			m_Plane[iPlane].d;
+		if (fDistance == 0) return F_ONPLANE;
+		if (fDistance < 0) return F_FRONT;
+	}
+	return F_BACK;
+}
+
+F_POSITION Frustum::ClassifyBox(T_BOX v)
+{
+	float		fPlaneToCenter = 0.0;
+	float		fDistance = 0.0f;
+	XMFLOAT3	vDir;
+	F_POSITION  t_Position;
+
+	t_Position = F_SPANNING;
+	for (int iPlane = 0; iPlane < 6; iPlane++)
+	{
+		vDir = v.vAxis[0] * v.fExtent[0];
+		fDistance = fabs(m_Plane[iPlane].a * vDir.x + m_Plane[iPlane].b * vDir.y + m_Plane[iPlane].c * vDir.z);
+		vDir = v.vAxis[1] * v.fExtent[1];
+		fDistance += fabs(m_Plane[iPlane].a * vDir.x + m_Plane[iPlane].b * vDir.y + m_Plane[iPlane].c * vDir.z);
+		vDir = v.vAxis[2] * v.fExtent[2];
+		fDistance += fabs(m_Plane[iPlane].a * vDir.x + m_Plane[iPlane].b * vDir.y + m_Plane[iPlane].c * vDir.z);
+
+		fPlaneToCenter = m_Plane[iPlane].a * v.vCenter.x + m_Plane[iPlane].b * v.vCenter.y +
+			m_Plane[iPlane].c * v.vCenter.z + m_Plane[iPlane].d;
+
+		if (fPlaneToCenter <= -fDistance) return F_BACK;
+		/*if (fPlaneToCenter > 0)
+		{
+			if (fPlaneToCenter < fDistance)
+			{
+				t_Position = F_SPANNING;
+				break;
+			}
+		}
+		else
+			if (fPlaneToCenter < 0)
+			{
+				t_Position = F_BACK;
+				if (fPlaneToCenter > -fDistance)
+				{
+					t_Position = F_SPANNING;
+				}
+				break;
+			}*/
+	}
+	return t_Position;
+}
+```
         - **Collider ObbBox, FbxMesh**의 **RayCast**를 이용한 충돌 구현
     - **FBXObject**
         - FBXSDK를 통해 리소스를 로드, **Vertex를 Index**로 구축하는 알고리즘을 구현해 최적화
