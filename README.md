@@ -46,32 +46,32 @@
 <img width="1095" height="283" alt="image" src="https://github.com/user-attachments/assets/e32c4ffa-cfbd-4384-965e-8f38a79b3706" />
 
 - **Foliage**
-    - 인스턴싱을 활용한 렌더링으로 맵전체에 잔디(폴리지)구현 
-	 <img width="1299" height="559" alt="image" src="https://github.com/user-attachments/assets/0aaa797e-ffc4-4445-82da-6a602bda5acc" />
+  - 인스턴싱을 활용한 렌더링으로 맵전체에 잔디(폴리지)구현
+<img width="1299" height="559" alt="image" src="https://github.com/user-attachments/assets/0aaa797e-ffc4-4445-82da-6a602bda5acc" />
 
           
  ![Untitled2](https://github.com/ckdlscjs/TeamProject/assets/41976800/a7b14cf1-81f3-4bc0-afc0-592d8eab7d8e)
 - **UI**
-    - **Fade In, Out / Gage**
-        - Frame당 **Vertex의 R,G,B,A** 값을 조절해 Shader에서 사용
+- **Fade In, Out / Gage**
+  - Frame당 **Vertex의 R,G,B,A** 값을 조절해 Shader에서 사용
 <img width="773" height="573" alt="image" src="https://github.com/user-attachments/assets/1d3715e4-cfae-49ea-b032-03748d71d711" />
 
-    - **Billboard**
-        - 투영행렬을 사용하는 **UI를 빌보드화** 하여 Damage, Gage 등에 사용
+- **Billboard**
+  - 투영행렬을 사용하는 **UI를 빌보드화** 하여 Damage, Gage 등에 사용
 <img width="666" height="419" alt="image" src="https://github.com/user-attachments/assets/b6e3515c-696d-4814-ba81-4f7a81bde745" />
 
-    - **Text**
-        - DXWrite를 이용, Scenario등 텍스트를 띄우고 Fade In, Out을 같이 사용
-    - **ClockWiseFade**
-        - PixelShader내에서 ConstantBuffer에서 넘어온 **Degree값을 기반으로 atan**를 이용해 계산하여 시계방향 으로 Fade되는 효과를 구현
+- **Text**
+  - DXWrite를 이용, Scenario등 텍스트를 띄우고 Fade In, Out을 같이 사용
+- **ClockWiseFade**
+  - PixelShader내에서 ConstantBuffer에서 넘어온 **Degree값을 기반으로 atan**를 이용해 계산하여 시계방향 으로 Fade되는 효과를 구현
 <img width="865" height="416" alt="image" src="https://github.com/user-attachments/assets/f02a1e59-85b0-4f03-a2c0-ed7353b755c0" />
 
-    - **MiniMap**
-        - 추가 카메라를 통해 별도의 **RTT, ViewPort를 이용해 렌더링** 플레이어와 Enemy는 GeometryShader를 이용한 Box로 Render
+- **MiniMap**
+    - 추가 카메라를 통해 별도의 **RTT, ViewPort를 이용해 렌더링** 플레이어와 Enemy는 GeometryShader를 이용한 Box로 Render
 <img width="560" height="568" alt="image" src="https://github.com/user-attachments/assets/ee03277f-ed16-403a-b293-fac853dde880" />
 
-    - **AlphaMapBlur**
-        - 가우시안값, AlphaMapWeight을 통해 **가중치에 따른 SRV의 Blur** 구현
+- **AlphaMapBlur**
+  - 가우시안값, AlphaMapWeight을 통해 **가중치에 따른 SRV의 Blur** 구현
 
 ## 동영상
 https://youtu.be/4ECHTmTD6h4?si=qe3qtL75Kr7zCrz7 (LoLShinSouls) </br>
