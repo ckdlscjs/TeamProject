@@ -18,8 +18,7 @@
 ![Untitled](https://github.com/ckdlscjs/TeamProject/assets/41976800/a4ed9c9e-fc8b-4c57-b4db-3d61b6a8cb14)
 - **MapTool, Map**
     - **LandScape**
-        - **Frustum Culling**을 통한 Rendering최적화
-````
+    - **Frustum Culling**을 통한 Rendering최적화
 ```c++
 F_POSITION Frustum::ClassifyPoint(XMVECTOR v)
 {
@@ -61,8 +60,8 @@ F_POSITION Frustum::ClassifyBox(T_BOX v)
 	return t_Position;
 }
 ```
-````
-- **Collider ObbBox, FbxMesh**의 **RayCast**를 이용한 충돌 구현
+
+-**Collider ObbBox, FbxMesh**의 **RayCast**를 이용한 충돌 구현
  ```c++
 bool TCollision::IntersectRayToOBB(const XMVECTOR& rayOrigin, const XMVECTOR& rayDirection, const T_BOX& obb, float& dist)
 {
