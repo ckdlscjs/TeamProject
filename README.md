@@ -56,24 +56,6 @@ F_POSITION Frustum::ClassifyBox(T_BOX v)
 			m_Plane[iPlane].c * v.vCenter.z + m_Plane[iPlane].d;
 
 		if (fPlaneToCenter <= -fDistance) return F_BACK;
-		/*if (fPlaneToCenter > 0)
-		{
-			if (fPlaneToCenter < fDistance)
-			{
-				t_Position = F_SPANNING;
-				break;
-			}
-		}
-		else
-			if (fPlaneToCenter < 0)
-			{
-				t_Position = F_BACK;
-				if (fPlaneToCenter > -fDistance)
-				{
-					t_Position = F_SPANNING;
-				}
-				break;
-			}*/
 	}
 	return t_Position;
 }
