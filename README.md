@@ -60,7 +60,56 @@ F_POSITION Frustum::ClassifyBox(T_BOX v)
 	return t_Position;
 }
 ```
-- **Collider ObbBox, FbxMesh**의 **RayCast**를 이용한 충돌 구현
+	- **Collider ObbBox, FbxMesh**의 **RayCast**를 이용한 충돌 구현
+ ```c++
+bool TCollision::IntersectRayToOBB(const XMVECTOR& rayOrigin, const XMVECTOR& rayDirection, const T_BOX& obb, float& dist)
+{
+    // Calculate the center and extent of the OBB
+    XMVECTOR vCenter = XMLoadFloat3(&obb.vCenter);
+    XMVECTOR vExtent = XMVectorSet(obb.fExtent[0], obb.fExtent[1], obb.fExtent[2], 0.0f);
+
+    // Calculate the ray origin in local space of the OBB
+    XMVECTOR vRayOriginLocal = rayOrigin - vCenter;
+
+    // Calculate the inverse of the OBB's world matrix
+    XMMATRIX matWorld = XMMatrixIdentity();
+    matWorld.r[0] = XMLoadFloat3(&obb.vAxis[0]);
+    matWorld.r[1] = XMLoadFloat3(&obb.vAxis[1]);
+    matWorld.r[2] = XMLoadFloat3(&obb.vAxis[2]);
+    matWorld.r[3] = vCenter;
+    XMMATRIX matWorldInverse = XMMatrixInverse(nullptr, matWorld);
+
+    // Transform the ray to local space of the OBB
+    XMVECTOR vRayDirectionLocal = XMVector3Normalize(XMVector3TransformNormal(rayDirection, matWorldInverse));
+    XMVECTOR vRayOriginLocalTransformed = XMVector3TransformCoord(vRayOriginLocal, matWorldInverse);
+
+    // Perform ray-OBB intersection test
+    float tmin = -XMVectorGetX(vExtent);
+    float tmax = XMVectorGetX(vExtent);
+    for (int i = 0; i < 3; ++i) {
+        float e = XMVectorGetByIndex(vExtent, i);
+        float d = XMVectorGetByIndex(vRayDirectionLocal, i);
+        float o = XMVectorGetByIndex(vRayOriginLocalTransformed, i);
+
+        if (fabsf(d) > FLT_EPSILON) {
+            float t1 = (tmin - o) / d;
+            float t2 = (tmax - o) / d;
+            if (t1 > t2) std::swap(t1, t2);
+            if (t1 > -e) tmin = t1;
+            if (t2 < e) tmax = t2;
+            if (tmin > tmax) return false;
+        }
+        else if (-o > e || o > e) {
+            return false;
+        }
+    }
+
+    // Store the intersection distance
+    dist = tmin;
+
+    return true;
+}
+ ```
 
     - **FBXObject**
         - FBXSDK를 통해 리소스를 로드, **Vertex를 Index**로 구축하는 알고리즘을 구현해 최적화
