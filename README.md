@@ -59,8 +59,8 @@ F_POSITION Frustum::ClassifyBox(T_BOX v)
 	}
 	return t_Position;
 }
-```
-	- **Collider ObbBox, FbxMesh**의 **RayCast**를 이용한 충돌 구현
+
+- **Collider ObbBox, FbxMesh**의 **RayCast**를 이용한 충돌 구현
  ```c++
 bool TCollision::IntersectRayToOBB(const XMVECTOR& rayOrigin, const XMVECTOR& rayDirection, const T_BOX& obb, float& dist)
 {
