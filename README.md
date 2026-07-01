@@ -1,26 +1,25 @@
-# MapTool & LoLShinSouls 핵심 기능 및 소스코드 상세 분석
+# 🛠️ MapTool & LoLShinSouls 핵심 기능 및 소스코드 상세 분석
 
-본 문서는 DirectX 11 API를 기반으로 개발된 3D 맵 에디터(MapTool) 엔진과 액션 RPG 게임 클라이언트(LoLShinSouls)의 핵심 최적화 및 렌더링 기능들을 실제 깃허브 리포지토리에 존재하는 소스코드의 데이터 연산 흐름을 바탕으로 상세하게 분석한 기술 보고서임.
+본 문서는 DirectX 11 API를 기반으로 개발된 3D 맵 에디터(MapTool) 엔진과 액션 RPG 게임 클라이언트(LoLShinSouls)의 핵심 최적화 및 렌더링 기능들을 실제 소스코드의 데이터 연산 흐름을 바탕으로 상세하게 분석한 기술 명세서임.
 
 ---
 
 ## 1. 쿼드트리 지형 공간 분할 및 가시성 선별
-* **파일명**: `TeamProject/GameProject/FQuadTree.cpp`
-* **기능 개요**: 지형 정점 탐색의 시간 복잡도($O(N)$)를 제어하기 위해 전체 공간을 4진 트리 노드로 계층 분할하고, 절두체 내에 활성화되어 있는 리프 노드 목록만을 필터링하여 실시간 높이 편집 및 컬링 연산을 최적화함.
+* **관련 소스코드**: `FQuadTree.cpp` (`SelectVertexList`)
+* **기능 개요**: 지형 정점 탐색의 시간 복잡도($O(N)$)를 최적화하기 위해 전체 공간을 4진 트리 노드로 분할하고, 충돌 영역에 걸쳐 있는 리프 노드 목록만을 빠르게 검색함.
 * **코드 상세 분석**:
   - 마우스 조형(Sculpting) 브러시 기동 시 전달된 범위 상자(`T_BOX`)와 절두체 가시 영역에 의해 선별된 리프 노드 목록(`m_pDrawLeafNodeList`)을 전수 순회함.
   - 각 노드의 바운딩 박스(`node->m_Box`)와 마우스 변형 영역 간의 1차 충돌 판정(`TCollision::BoxToBox`)을 가동하여 충돌 유형(`ret > 0`)이 감지된 노드 포인터만 `selectNodeList` 벡터에 삽입함.
   - 이를 통해 넓은 월드 지형 중에서 편집 영향권에 포함된 소수의 정점 인덱스 범위($O(\log N)$)만을 선별하여 정점 데이터를 동적으로 빠르게 수정할 수 있도록 계산을 간소화함.
 
 ```cpp
-// FQuadTree.cpp: 절두체 내 활성 리프 노드 목록 대상의 AABB/OBB 충돌 선별 루프
+// FQuadTree.cpp: 리프 노드 AABB 충돌 검사를 통한 정점 선별 가속화
 UINT FQuadTree::SelectVertexList(T_BOX& box, std::vector<FNode*>& selectNodeList)
 {
     for (auto node : m_pDrawLeafNodeList)
     {
         if (node != nullptr)
         {
-            // 리프 노드의 Bounding Box와 피킹 박스 간의 3D 충돌 판정
             TCollisionType ret = TCollision::BoxToBox(node->m_Box, box);
             if (ret > 0)
             {
@@ -34,75 +33,40 @@ UINT FQuadTree::SelectVertexList(T_BOX& box, std::vector<FNode*>& selectNodeList
 
 ---
 
-## 2. FBX 에셋 D3D11 버퍼 GPU 자원화
-* **파일명**: `TeamProject/GameLib/BaseObject.cpp` (또는 `Interface.cpp` 기저 버퍼 제어부)
-* **기능 개요**: 파싱된 섭메시(Sub-mesh)들의 기하 원본 데이터를 디바이스 인터페이스를 통해 직접 제어하여 D3D11 비디오 메모리 버퍼 자원으로 정밀 생성 및 전송함.
+## 2. D3D11 버텍스 버퍼 GPU 자원화
+* **관련 소스코드**: `VertexBuffer.cpp` (`VertexBuffer` 생성자)
+* **기능 개요**: 시스템 메모리에 적재된 정점 데이터를 DirectX 11 API를 통해 GPU 비디오 메모리 버퍼 자원으로 직접 변환 및 전송함.
 * **코드 상세 분석**:
-  - `BaseObject::CreateVertexBuffer()` 함수 내부에서 정점 생성 프로세스(`CreateVertexData()`)를 거친 정점 리스트(`m_VertexList`)의 메모리 크기를 파악하여 `D3D11_BUFFER_DESC` 구조체(`bd`)에 바인딩 크기(`ByteWidth`)를 정의함.
-  - 버퍼의 속성을 디바이스 가독 전용(`D3D11_USAGE_DEFAULT`) 및 버텍스 버퍼 타겟(`D3D11_BIND_VERTEX_BUFFER`)으로 바인딩함.
-  - `D3D11_SUBRESOURCE_DATA` 구조체(`sd`)의 `pSysMem` 포인터에 CPU 시스템 메모리에 적재된 정점 배열의 시작 주소(`&m_VertexList.at(0)`)를 직접 대입하고, `CreateBuffer` API를 통해 GPU 가독형 버텍스 버퍼 자원(`m_pVertexBuffer`)을 메모리에 적재함.
+  - `D3D11_BUFFER_DESC` 구조체(`bufferDesc`)를 정의하여 크기(`ByteWidth`), GPU 메모리 속성(`D3D11_USAGE_DEFAULT`), 바인딩 플래그(`D3D11_BIND_VERTEX_BUFFER`)를 설정함.
+  - `D3D11_SUBRESOURCE_DATA` 구조체(`resourceData`)의 `pSysMem` 포인터에 CPU 시스템 메모리에 적재된 정점 배열의 시작 주소(`pVertices`)를 대입함.
+  - D3D11 디바이스(`pDevice->CreateBuffer`) API를 호출하여 버텍스 버퍼 자원(`m_pBuffer`)을 비디오 메모리에 적재하고 바인딩을 완료함.
 
 ```cpp
-// BaseObject.cpp: 정점 리스트 데이터를 GPU 하드웨어 버텍스 버퍼로 직접 변환 및 전송
-HRESULT BaseObject::CreateVertexBuffer()
+// VertexBuffer.cpp: DirectX 11 API를 통한 버텍스 버퍼 생성 및 데이터 전송
+VertexBuffer::VertexBuffer(ID3D11Device* pDevice, void* pVertices, UINT iSizeVertex, UINT iSizeList, INPUT_LAYOUT layout) : m_pBuffer(nullptr)
 {
-    HRESULT hr;
-    CreateVertexData(); // 정점 데이터 생성 프로세스 호출
-    
-    D3D11_BUFFER_DESC bd;
-    ZeroMemory(&bd, sizeof(bd));
-    bd.ByteWidth = sizeof(PNCT_VERTEX) * m_VertexList.size(); // 총 바이트 크기 설정
-    bd.Usage = D3D11_USAGE_DEFAULT;                           // GPU 디폴트 가독 모드
-    bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;                  // 정점 버퍼 타겟 바인딩
+	D3D11_BUFFER_DESC bufferDesc = {};
+	bufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	bufferDesc.ByteWidth = iSizeVertex * iSizeList;
+	bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	bufferDesc.CPUAccessFlags = 0;
+	bufferDesc.MiscFlags = 0;
 
-    D3D11_SUBRESOURCE_DATA sd;
-    ZeroMemory(&sd, sizeof(sd));
-    sd.pSysMem = &m_VertexList.at(0);                         // CPU 시스템 메모리 원본 주소 연결
-    
-    // DirectX 11 API를 직접 제어하여 버퍼 생성 및 데이터 전송
-    hr = m_pd3dDevice->CreateBuffer(&bd, &sd, &m_pVertexBuffer);
-    return hr;
+	D3D11_SUBRESOURCE_DATA resourceData;
+	ZeroMemory(&resourceData, sizeof(D3D11_SUBRESOURCE_DATA));
+	resourceData.pSysMem = pVertices;
+
+	m_iSizeVertex = iSizeVertex;
+	m_iSizeList = iSizeList;
+
+	pDevice->CreateBuffer(&bufferDesc, &resourceData, &m_pBuffer);
 }
 ```
 
 ---
 
-## 3. 4중 텍스처 스플래팅 랜드스케이프 셰이더
-* **파일명**: `TeamProject/GameProject/MeshMap.cpp` 연동 셰이더
-* **기능 개요**: 지형 정점마다 여러 장의 텍스처를 선형적으로 부드럽게 합성하여 렌더링하기 위해 픽셀 셰이더 내에서 가중치 혼합 연산을 병렬 처리함.
-* **코드 상세 분석**:
-  - 픽셀 셰이더 레지스터 `t0`에 바인딩된 혼합 마스크 텍스처(`g_txMaskTex`)로부터 RGBA 성분의 채널별 가중치 값(`mask.rgba`)을 샘플링하여 믹싱 인자로 사용함.
-  - 기본 텍스처 컬러(`texelColor`)를 베이스로 두고, 셰이더 컴파일러가 지원하는 실시간 선형 보간 연산(`lerp`) 식을 통해 디테일 텍스처 4종(`splatTex2` ~ `splatTex5`)의 컬러값을 마스크 채널 가중치에 맞춰 픽셀 단위로 실시간 합성(Modulate)함으로써 GPU 파이프라인의 상태 전환 정체 없이 부드러운 경계 랜드스케이프 색상을 연산함.
-
-```hlsl
-// MapPixelShader.hlsl: 4채널 마스크 텍스처 가중치를 활용한 4중 지형 선형 혼합 픽셀 셰이더
-Texture2D g_txBaseTex  : register(t0); // 기본 베이스 텍스처
-Texture2D g_txMaskTex  : register(t1); // RGBA 혼합 가중치 마스크
-Texture2D g_txSplat[4] : register(t2); // 디테일 텍스처 4종 슬롯
-SamplerState g_Sampler : register(s0);
-
-float4 PS(VS_OUTPUT input) : SV_Target
-{
-    float4 texelColor = g_txBaseTex.Sample(g_Sampler, input.t);
-    float4 mask = g_txMaskTex.Sample(g_Sampler, input.t);
-    
-    // RGBA 각 성분 가중치 벡터 추출
-    float4 weights = mask.rgba;
-    
-    // 디테일 텍스처들을 마스크 가중치 비율에 맞추어 선형 보간 합성
-    float4 finalColor = texelColor * (1.0f - weights.r) + g_txSplat[0].Sample(g_Sampler, input.t) * weights.r;
-    finalColor = finalColor * (1.0f - weights.g) + g_txSplat[1].Sample(g_Sampler, input.t) * weights.g;
-    finalColor = finalColor * (1.0f - weights.b) + g_txSplat[2].Sample(g_Sampler, input.t) * weights.b;
-    finalColor = finalColor * (1.0f - weights.a) + g_txSplat[3].Sample(g_Sampler, input.t) * weights.a;
-    
-    return finalColor;
-}
-```
-
----
-
-## 4. OBB 레이캐스트 기반 지형 정밀 피킹 검출
-* **파일명**: `TeamProject/GameProject/MyMain.cpp` (또는 `ToolSystemMap.cpp` 연동 기작)
+## 3. OBB 레이캐스트 기반 지형 정밀 피킹 검출
+* **관련 소스코드**: `MyMain.cpp` (`CheckTerrainPicking`)
 * **기능 개요**: 지형 정적 모델 및 바운딩 영역 편집 시, 전체 삼각면을 전수 조사하는 성능 정체를 해소하기 위해 2단계(Bounding Box $\rightarrow$ Triangle) 피킹 구조를 구축함.
 * **코드 상세 분석**:
   - 1단계: 쿼드트리의 리프 노드(`m_pDrawLeafNodeList`)를 선회하면서 카메라 마우스 광선(`m_Ray`)의 기작 벡터와 노드의 OBB 바운딩 정보(`node->m_Box`)를 대조해 1차 충돌(`IntersectRayToOBB`) 여부를 가속 검사함.
@@ -140,14 +104,14 @@ bool MyMain::CheckTerrainPicking(float& outDist, XMVECTOR& outIntersection)
             }
         }
     }
-    // ... 가장 가까운 거리(first)의 교점(second)을 최종 피킹 위치로 반환 처리 ...
+    // ... chkDist에서 최단 거리의 정점을 획득하여 반환 처리 ...
 }
 ```
 
 ---
 
-## 5. 이항 계수 기반 n차 베지어 곡선 카메라 연출
-* **파일명**: `TeamProject/GameProject/CameraCinema.cpp`
+## 4. 이항 계수 기반 n차 베지어 곡선 카메라 연출
+* **관련 소스코드**: `CameraCinema.cpp` (`MoveCameraBezierSpline`)
 * **기능 개요**: 컷신 시네마틱 동선 구성 시 점과 점 사이의 단순 선형 이동에 따른 각진 화면 회전을 예방하고, 부드럽고 일정한 연속 이동과 회전의 카메라 동선을 산출함.
 * **코드 상세 분석**:
   - 배치된 경로 제어점의 개수($N = \text{posList.size()} - 1$)를 차수로 규정하고, 곡선 가속 보간 인자($t$)를 시간 비율로 산정함.
@@ -177,98 +141,36 @@ void CameraCinema::MoveCameraBezierSpline(float time, float duration, std::vecto
 
 ---
 
-## 6. 상속 트리 UI 프레임워크 및 마우스 충돌 판정
-* **파일명**: `TeamProject/GameLib/Interface.cpp`
-* **기능 개요**: 다수의 인게임 UI 객체들을 재귀 제어하기 위해 상대 좌표 기반의 트리 계층(`m_pChildList`)을 구성하고, 마우스와의 점 대 사각형 충돌 검출을 통해 UI 상태 전이를 동기화함.
+## 5. 1D 펄린 노이즈 기반 카메라 흔들림 연출
+* **관련 소스코드**: `Camera.cpp` (`PerlinNoise1D` 및 `UpdateCameraShake`)
+* **기능 개요**: 난수(`rand`) 기반 흔들림의 한계를 극복하기 위해 수학적 점진적 연속성이 보장되는 1D 펄린 노이즈 파동을 생성하여 카메라 쉐이크를 연출함.
 * **코드 상세 분석**:
-  - `Interface::Frame()` 호출 시 입력 장치의 스크린 좌표(`I_Input.m_ptPos`)와 UI의 월드 충돌 영역(`m_rtCollision`) 간의 점 대 사각형 충돌 검출(`RectToPoint`)을 수행함.
-  - 마우스 충돌 검출 여부에 따라 `UI_HOVER` 상태로 상태를 전이하며, 마우스 왼쪽 버튼 이벤트 감지 시 `UI_PUSH` 및 `UI_SELECT` 상태를 동적으로 분기시켜 이에 상응하는 스페셜 리소스 텍스처를 스위칭함.
-  - 최종 갱신 완료 시 `ScreenToNDC` 함수를 호출하여 화면 좌표계를 D3D11에 바인딩 가능한 NDC 공간 좌표(-1.0 ~ 1.0)로 정규화하고 GPU 정점 데이터를 갱신함.
+  - `InitHash`를 통해 난수 엔진(`std::mt19937`)으로 256개의 셔플 해시 테이블(`hash`)을 빌드해 둠.
+  - 시간 변화량에 따른 연속값(`x`)을 입력받아 정수 바운더리 내에서 기울기 오프셋(`Gradient`)을 연산하고, 페이드 곡선(`Fade(x)`) 가중치를 통한 보간(`Lerp`) 처리를 수행하여 연속적인 1D 펄린 노이즈 분포를 산출함.
+  - 진동 시간 흐름에 비례하여 감쇄 인자(`shakeFactor`)를 곱하고, X/Y 오프셋에 대해 주파수와 진폭을 적용하여 최종 뷰 좌표 오프셋(`noisePos`)을 동적 적용함.
 
 ```cpp
-// Interface.cpp: UI 충돌 범위 내 마우스 이벤트 전이에 따른 텍스처 상태값 갱신 및 NDC 변환
-bool Interface::Frame()
+// Camera.cpp: 1D 펄린 노이즈 생성 및 카메라 쉐이크 오프셋 갱신 처리
+float Camera::PerlinNoise1D(float x)
 {
-    POINT ptMouse = I_Input.m_ptPos;
-    // 마우스가 UI 충돌 렉트 영역 내부로 진입했는지 2D 교차 검사 기동
-    if (TCollision::RectToPoint(m_rtCollision, ptMouse))
-    {
-        m_CurrentState = UI_HOVER;
-        m_pCurrentTex = m_EventState.m_pStateList[UI_HOVER];
-        
-        // 버튼 누름 및 홀딩에 따른 액티브 상태 업데이트
-        if (I_Input.GetKey(VK_LBUTTON) == KEY_PUSH || I_Input.GetKey(VK_LBUTTON) == KEY_HOLD)
-        {
-            m_CurrentState = UI_PUSH;
-            m_pCurrentTex = m_EventState.m_pStateList[UI_PUSH];
-        }
-        if (I_Input.GetKey(VK_LBUTTON) == KEY_UP) 
-        {
-            m_CurrentState = UI_SELECT;
-        }
-    }
-    else
-    {
-        m_pCurrentTex = m_EventState.m_pStateList[UI_NORMAL];
-    }
-    
-    ScreenToNDC();        // NDC 정규화 좌표계 변환 수행
-    UpdateVertexBuffer(); // GPU 버텍스 버퍼 다이내믹 업데이트 호출
-    return true;
+	int X = (int)floor(x) & 255;
+	x -= floor(x);
+	float u = Fade(x);
+	int A = hash[X];
+	int B = hash[(X + 1) & 255];
+	return Lerp(Gradient(hash[A], x), Gradient(hash[B], x - 1.0f), u);
 }
-```
 
----
-
-## 7. RTT 미니맵 및 기하 셰이더 포인트 팽창 렌더 패스
-* **파일명**: 미니맵 팽창 기하 셰이더 (`MinimapGS.hlsl`)
-* **기능 개요**: 미니맵 내에 수많은 캐릭터/몬스터 아이콘을 렌더링할 때 버퍼 데이터 갱신 및 드로우콜 비용을 최소화하기 위해, 단일 위치 정보 정점을 기하 셰이더 상에서 사각형 기하 도형으로 실시간 확장 생성함.
-* **코드 상세 분석**:
-  - CPU는 미니맵에 표시될 다수 캐릭터의 3D 월드 위치 정보만 담은 단 1개의 포인트 정점(Primitive Point) 리스트를 정렬해 GPU에 전송함.
-  - 기하 셰이더(Geometry Shader) 단에서 `[maxvertexcount(4)]` 속성을 부여받아, 포인트 1개를 입력으로 하여 뷰 투영 변환 행렬을 대조해 2D 사각형 모퉁이 정점 4개를 실시간으로 연산 및 출력 스트림(`TriangleStream`)에 주입함.
-  - 대량 배치에 따른 정점 자원 전송 오버헤드와 개별 2D Plane 버퍼 구성 병목을 최하단 GPU 레벨에서 최적화 렌더링함.
-
-```hlsl
-// MinimapGS.hlsl: 단일 위치 포인트 정점을 기하 셰이더 상에서 사각형 기하 정점 4개로 팽창
-struct GS_INPUT
+void Camera::UpdateCameraShake()
 {
-    float3 Pos : POSITION;
-    float2 Size : SIZE;
-};
-
-struct GS_OUTPUT
-{
-    float4 Pos : SV_POSITION;
-    float2 Tex : TEXCOORD0;
-};
-
-[maxvertexcount(4)]
-void GS(point GS_INPUT input[1], inout TriangleStream<GS_OUTPUT> outputStream)
-{
-    GS_OUTPUT output;
-    float3 pos = input[0].Pos;
-    float2 halfSize = input[0].Size * 0.5f;
-
-    // 단일 포인트를 중심으로 사각형 4개 모퉁이의 상대 오프셋 좌표 실시간 연산 및 투영 변환
-    float3 corners[4] = {
-        float3(pos.x - halfSize.x, pos.y + halfSize.y, pos.z), // 좌상단
-        float3(pos.x + halfSize.x, pos.y + halfSize.y, pos.z), // 우상단
-        float3(pos.x - halfSize.x, pos.y - halfSize.y, pos.z), // 좌하단
-        float3(pos.x + halfSize.x, pos.y - halfSize.y, pos.z)  // 우하단
-    };
-
-    float2 uvs[4] = {
-        float2(0.0f, 0.0f), float2(1.0f, 0.0f),
-        float2(0.0f, 1.0f), float2(1.0f, 1.0f)
-    };
-
-    for (int i = 0; i < 4; i++)
-    {
-        // 월드 위치 좌표를 동적으로 확장하여 스트림 출력
-        output.Pos = mul(float4(corners[i], 1.0f), g_matViewProj);
-        output.Tex = uvs[i];
-        outputStream.Append(output);
+	if (m_fShakeCurrent < m_fShakeDuration)
+	{
+		float shakeFactor = 1.0f - (m_fShakeCurrent / m_fShakeDuration);
+		float offsetX = PerlinNoise1D(m_fShakeCurrent * m_fShakeFrequency) * m_fShakeAmplitude * shakeFactor;
+		float offsetY = PerlinNoise1D((m_fShakeCurrent + 1000.0f) * m_fShakeFrequency) * m_fShakeAmplitude * shakeFactor;
+		TVector3 noisePos(offsetX, offsetY, 0.0f);
+		m_vPos += noisePos;
+        // ... 생략 ...
     }
-    outputStream.RestartStrip();
 }
 ```
