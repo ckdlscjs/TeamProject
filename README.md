@@ -1,9 +1,11 @@
 # 🎮 LoLShinSouls 핵심 기능 및 소스코드 상세 분석
 
+본 문서는 DirectX 11 API를 기반으로 개발된 액션 RPG 게임 클라이언트(LoLShinSouls)의 핵심 게임 플로우, 카메라, 맵 로드, 포그 셰이딩 및 UI 프레임워크 기능들을 실제 소스코드의 데이터 연산 흐름을 바탕으로 상세하게 분석한 기술 명세서임.
+
 ---
 
 ## 1. 전반적인 게임 플로우 메인프로그램구성
-* **파일명**: `TeamProject/GameLib/GameCore.cpp` (`Run` 및 `CoreFrame`) / `TeamProject/GameProject/MyMain.cpp` (`Frame` 및 `Render`)
+* **파일명**: [TeamProject/GameLib/GameCore.cpp](https://github.com/ckdlscjs/TeamProject/blob/master/TeamProject/GameLib/GameCore.cpp) (Run 및 CoreFrame) / [TeamProject/GameProject/MyMain.cpp](https://github.com/ckdlscjs/TeamProject/blob/master/TeamProject/GameProject/MyMain.cpp) (Frame 및 Render)
 * **기능 개요**: Win32 메시지 펌핑과 디바이스 라이프사이클을 조율하여 게임 프레임 무한 루프를 기동하고, 입력, 타이머, 사운드 및 최상위 씬(Scene) 상태 업데이트와 그리기(Render) 흐름을 매 프레임 제어함.
 * **코드 상세 분석**:
   - `GameCore::Run()`은 `CoreInit()`를 거쳐 `MyWindows::Run()` 윈도우 메시지 펌핑이 유지되는 동안 매 프레임 `CoreFrame()` 과 `CoreRender()` 를 가동하는 윈도우 루프를 기동함.
@@ -84,7 +86,7 @@ bool MyMain::Render()
 ---
 
 ## 2. 카메라 기능들
-* **파일명**: `TeamProject/GameProject/SpringArmCamera.cpp` (`CheckIntersectionWithMap`) / `TeamProject/GameProject/CameraCinema.cpp` (`MoveCameraBezierSpline`) / `TeamProject/GameLib/Camera.cpp` (`PerlinNoise1D` 및 `UpdateCameraShake`)
+* **파일명**: [TeamProject/GameProject/SpringArmCamera.cpp](https://github.com/ckdlscjs/TeamProject/blob/master/TeamProject/GameProject/SpringArmCamera.cpp) (CheckIntersectionWithMap) / [TeamProject/GameProject/CameraCinema.cpp](https://github.com/ckdlscjs/TeamProject/blob/master/TeamProject/GameProject/CameraCinema.cpp) (MoveCameraBezierSpline) / [TeamProject/GameLib/Camera.cpp](https://github.com/ckdlscjs/TeamProject/blob/master/TeamProject/GameLib/Camera.cpp) (PerlinNoise1D 및 UpdateCameraShake)
 * **기능 개요**: 3인칭 뷰 스프링암의 지형 충돌 장애물 회피 검출과 영화적 연출을 위한 n차 베지어 무빙 보간, 타격감 구현을 위한 1D 펄린 노이즈 진동 쉐이크 효과를 담당함.
 * **코드 상세 분석**:
   - `CheckIntersectionWithMap()`은 카메라 시선 벡터 레이를 쿼드트리의 가시 리프 노드 OBB 영역과 교차 연산(`OBBtoRay`)하여 1차 선별하고, 해당 노드의 삼각면 정점 좌표(`v0, v1, v2`)를 획득해 삼각형 피킹(`ChkPick`) 검사를 가동해 최단 충돌 거리를 갱신하여 장애물 뒤로 카메라가 가리는 현상을 예방함.
@@ -194,7 +196,7 @@ void Camera::UpdateCameraShake()
 ---
 
 ## 3. 맵 로드 및 구성
-* **파일명**: `TeamProject/GameProject/FQuadTree.cpp` (`OpenMap`)
+* **파일명**: [TeamProject/GameProject/FQuadTree.cpp](https://github.com/ckdlscjs/TeamProject/blob/master/TeamProject/GameProject/FQuadTree.cpp) (OpenMap)
 * **기능 개요**: 맵 에디터에서 익스포트해둔 텍스트 형식의 씬 배치 설정 파일을 런타임 게임 클라이언트가 시작 시 직접 줄 단위 독해하여 지형 메쉬 및 다중 스플래팅 디테일 텍스처 자원을 구성함.
 * **코드 상세 분석**:
   - `std::ifstream` 스트림을 개방해 맵 데이터 파일(`szFullPath`)을 읽고 `std::getline` 및 문자열 구분 파싱을 실행함.
@@ -272,7 +274,7 @@ FQuadTree* OpenMap(std::wstring szFullPath, ID3D11Device* pd3dDevice, ID3D11Devi
 ---
 
 ## 4. 안개 (Fog)
-* **파일명**: `TeamProject/GameProject/MyMain.cpp` (안개 변수 정의) / `data/shader/SSB/ScreenShader.hlsl` (안개 합성 포스트 프로세싱 픽셀 셰이더)
+* **파일명**: [TeamProject/GameProject/MyMain.cpp](https://github.com/ckdlscjs/TeamProject/blob/master/TeamProject/GameProject/MyMain.cpp) (안개 변수 정의) / [data/shader/SSB/ScreenShader.hlsl](https://github.com/ckdlscjs/TeamProject/blob/master/TeamProject/data/shader/SSB/ScreenShader.hlsl) (안개 합성 포스트 프로세싱 픽셀 셰이더)
 * **기능 개요**: 화면 전체 렌더 포스트 프로세싱(Post-processing) 단계에서 3차원 월드 공간의 깊이/위치 버퍼 정보를 복원하여, 카메라와 픽셀 간의 거리에 따른 선형 및 지수 안개(Fog) 효과를 실시간 혼합 연산함.
 * **코드 상세 분석**:
   - `MyMain.cpp`에 안개의 시작 거리(`g_fFogStart = 30.0f`), 끝 거리(`g_fFogEnd = 200.0f`), 그리고 안개 밀도(`g_fFogDensity = 0.001f`)를 전역 상수 정의함.
@@ -312,7 +314,7 @@ ret = lerp(ret, fogColor, fogAmount);
 ---
 
 ## 5. UI 전반
-* **파일명**: `TeamProject/GameLib/Interface.cpp` (`Interface::Frame` 및 파생 클래스들의 `Frame` / `Render`) / `TeamProject/GameLib/Interface.h`
+* **파일명**: [TeamProject/GameLib/Interface.cpp](https://github.com/ckdlscjs/TeamProject/blob/master/TeamProject/GameLib/Interface.cpp) (Interface::Frame 및 파생 클래스들의 Frame / Render) / [TeamProject/GameLib/Interface.h](https://github.com/ckdlscjs/TeamProject/blob/master/TeamProject/GameLib/Interface.h)
 * **기능 개요**: 계층적 트리 구조 배치 기반의 UI 프레임워크 상에서, 각각 독립된 런타임 수명 주기를 갖는 애니메이션/트윈 컴포넌트(`InterfaceWork`)를 가동하여 클릭 변동 스케일 모션, 페이딩, 게이지바 보간, 플로팅 텍스트 렌더링, 시계 방향 스킬 쿨타임 마스크 연출 등을 일괄 동기화 처리함.
 * **코드 상세 분석**:
   - **UI 구조 트리 전파 (`Interface::Frame`)**:
