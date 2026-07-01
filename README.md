@@ -2,13 +2,203 @@
 
 ---
 
-## 1. 쿼드트리 기반 씬 파일 로딩 및 랜드스케이프 지형/텍스처 복치
-* **파일명**: `TeamProject/GameProject/FQuadTree.cpp` (`OpenMap`)
-* **기능 개요**: 맵 에디터에서 직렬화 출력해둔 씬 설정 텍스트 파일을 런타임 클라이언트 시작 시 파싱하여, 지형 메쉬 및 다중 스플래팅 텍스처 자원들을 `TextureMgr`을 통해 동적으로 로딩 및 바인딩 완료함.
+## 1. 전반적인 게임 플로우 메인프로그램구성
+* **파일명**: `TeamProject/GameLib/GameCore.cpp` (`Run` 및 `CoreFrame`) / `TeamProject/GameProject/MyMain.cpp` (`Frame` 및 `Render`)
+* **기능 개요**: Win32 메시지 펌핑과 디바이스 라이프사이클을 조율하여 게임 프레임 무한 루프를 기동하고, 입력, 타이머, 사운드 및 최상위 씬(Scene) 상태 업데이트와 그리기(Render) 흐름을 매 프레임 제어함.
 * **코드 상세 분석**:
-  - `std::ifstream` 스트림을 열어 씬 파일(`szFullPath`)을 텍스트 줄 단위로 정독함.
-  - 마스크 데이터 및 베이스 지형 텍스처 필드명(`m_pTexture`)을 파싱하면 텍스처 매니저(`I_Tex.Load`)를 가동해 GPU 텍스처 자원으로 로드함.
-  - 스플래팅 디테일 텍스처 목록(`m_ListTextureSplatting`)이 감지되면 쉼표(`,`) 구분자 파싱을 기동하여 각각의 스플래팅 소스 경로를 고속 분리한 후 일괄 로드하여 랜드스케이프 텍스처 벡터(`pTexList`)에 적재 연동함.
+  - `GameCore::Run()`은 `CoreInit()`를 거쳐 `MyWindows::Run()` 윈도우 메시지 펌핑이 유지되는 동안 매 프레임 `CoreFrame()` 과 `CoreRender()` 를 가동하는 윈도우 루프를 기동함.
+  - `CoreFrame()`은 키보드/마우스 입력(`I_Input.Frame()`), 시간 누적(`I_Timer.Frame()`), 텍스트 라이터(`g_pWriter->Frame()`)를 갱신한 뒤, 가상 함수 오버라이딩에 의해 `MyMain::Frame()`을 호출함.
+  - `MyMain::Frame()`에서는 포스트 프로세싱 MRT 자원(`m_MRT.Frame()`), 화면 스크린(`m_screen.Frame()`)을 처리하고, 씬 매니저인 `I_Scene.Frame()`을 기동해 인게임 월드의 상태 머신을 업데이트함.
+  - `MyMain::Render()`에서는 광원별 그림자 깊이 맵 연산(`light->PreRender()`)과 MRT 렌더링을 순차 기동하고 최종적으로 현재 활성화된 씬(`I_Scene.Render()`)의 드로우콜을 화면에 렌더링함.
+
+```cpp
+// GameCore.cpp: Win32 메시지 펌핑 기반 무한 루프 및 매 프레임 업데이트 기동
+bool	GameCore::Run()
+{
+	CoreInit();
+
+	m_bGameRun = true;
+	while (m_bGameRun)
+	{
+		if (MyWindows::Run())
+		{
+			if (!CoreFrame() || !CoreRender())
+			{
+				m_bGameRun = false;
+			}
+		}
+		else
+		{
+			m_bGameRun = false;
+		}
+	}
+
+	CoreRelease();
+
+	return true;
+}
+
+bool	GameCore::CoreFrame()
+{
+	I_Input.Frame();
+	I_Timer.Frame();
+	I_Sound.Frame();
+	g_pWriter->Frame();
+
+	return Frame();
+}
+```
+```cpp
+// MyMain.cpp: 씬(Scene) 매니저 업데이트 및 MRT 그림자 깊이 렌더링 흐름 조율
+bool    MyMain::Frame()
+{
+    if (I_Input.GetKey(VK_ESCAPE) == KEY_PUSH)
+        m_bGameRun = false;
+
+    m_MRT.Frame(); 
+
+    m_screen.Frame();
+    
+    I_Scene.Frame();
+    return true;
+}
+
+bool    MyMain::Render()
+{
+    {
+        auto lights = SSB::I_Light.GetLightList();
+        for (auto light : lights)
+        {
+            light->PreRender();
+            I_Scene.PreRender();
+        }
+    }
+
+    m_MRT.Render();
+    I_Scene.Render();
+
+    return true;
+}
+```
+
+---
+
+## 2. 카메라 기능들
+* **파일명**: `TeamProject/GameProject/SpringArmCamera.cpp` (`CheckIntersectionWithMap`) / `TeamProject/GameProject/CameraCinema.cpp` (`MoveCameraBezierSpline`) / `TeamProject/GameLib/Camera.cpp` (`PerlinNoise1D` 및 `UpdateCameraShake`)
+* **기능 개요**: 3인칭 뷰 스프링암의 지형 충돌 장애물 회피 검출과 영화적 연출을 위한 n차 베지어 무빙 보간, 타격감 구현을 위한 1D 펄린 노이즈 진동 쉐이크 효과를 담당함.
+* **코드 상세 분석**:
+  - `CheckIntersectionWithMap()`은 카메라 시선 벡터 레이를 쿼드트리의 가시 리프 노드 OBB 영역과 교차 연산(`OBBtoRay`)하여 1차 선별하고, 해당 노드의 삼각면 정점 좌표(`v0, v1, v2`)를 획득해 삼각형 피킹(`ChkPick`) 검사를 가동해 최단 충돌 거리를 갱신하여 장애물 뒤로 카메라가 가리는 현상을 예방함.
+  - `MoveCameraBezierSpline()`은 카메라 컷신 연출을 위한 키프레임 무빙 정보 구조체 배열(`camMoveList`)의 크기로부터 번스타인 기저 함수 가중치를 연산하여 이동 및 회전 궤적을 부드럽게 보간 계산함.
+  - `UpdateCameraShake()`는 해시 테이블과 Gradient Fade로 구현된 1D 펄린 노이즈를 기동하여 인과 연속성이 보장되는 화면 진동 오프셋(`noisePos`)을 X, Y축에 가해 화면 흔들림 및 프레임 감쇄를 셋업함.
+
+```cpp
+// SpringArmCamera.cpp: 지형 리프 노드 OBB 및 정밀 삼각면 레이 캐스팅 검출
+bool SSB::SpringArmCamera::CheckIntersectionWithMap()
+{
+	XMMATRIX camRotationMatrix = XMMatrixRotationRollPitchYaw(-m_fCameraPitchAngle, m_fCameraYawAngle, 0);
+	XMVECTOR DefaultForward = { 0, 0, 1, 0 };
+	XMVECTOR camPosition = XMVector3TransformNormal(DefaultForward, camRotationMatrix);
+	camPosition = XMVector3Normalize(camPosition);
+
+	m_Select.m_Ray.vOrigin = m_vTarget;
+	XMStoreFloat3(&m_Select.m_Ray.vDirection, camPosition);
+	m_Select.m_Ray.vDirection.Normalize();
+
+	float distance = _kMaxDistance;
+	if (Player::GetInstance().IsUltimateSkill())
+	{
+		distance = 30;
+	}
+
+	for (auto node : _map->m_pDrawLeafNodeList)
+	{
+		if (m_Select.OBBtoRay(&node->m_Box))
+		{
+			if (node->m_Box.vMin.x > m_vPos.x || node->m_Box.vMax.x < m_vPos.x || node->m_Box.vMin.z > m_vPos.z || node->m_Box.vMax.z < m_vPos.z)
+				continue;
+			UINT index = 0;
+			UINT iNumFace = node->m_IndexList.size() / 3;
+			for (UINT face = 0; face < iNumFace; face++)
+			{
+				UINT i0 = node->m_IndexList[index + 0];
+				UINT i1 = node->m_IndexList[index + 1];
+				UINT i2 = node->m_IndexList[index + 2];
+				TVector3 v0 = _map->m_pMap->m_ListVertex[i0].pos;
+				TVector3 v1 = _map->m_pMap->m_ListVertex[i1].pos;
+				TVector3 v2 = _map->m_pMap->m_ListVertex[i2].pos;
+				if (m_Select.ChkPick(v0, v1, v2, distance))
+				{
+					return true;
+				}
+				index += 3;
+			}
+		}
+	}
+	return false;
+}
+```
+```cpp
+// CameraCinema.cpp: n차 베지어 곡선 공식을 활용한 카메라 위치 및 시선방향 보간
+void CameraCinema::MoveCameraBezierSpline(float time, float duration, std::vector<CameraMove>& camMoveList, XMFLOAT3& getPos, XMFLOAT3& getDir)
+{
+	float t = time / duration;
+	int n = static_cast<int>(camMoveList.size()) - 1;
+	float u = 1.0f - t;
+	float un = pow(u, n);
+	float tn = pow(t, n);
+	XMFLOAT3 pos(0, 0, 0);
+	XMFLOAT3 dir(0, 0, 0);
+	for (int i = 0; i <= n; ++i)
+	{
+		float binomial = BinomialCoefficient(n, i);
+		float basis = binomial * pow(u, n - i) * pow(t, i);
+		pos.x += basis * camMoveList[i].camPos.x;
+		pos.y += basis * camMoveList[i].camPos.y;
+		pos.z += basis * camMoveList[i].camPos.z;
+
+		dir.x += basis * camMoveList[i].fYaw;
+		dir.y += basis * camMoveList[i].fPitch;
+		dir.z += basis * camMoveList[i].fRoll;
+	}
+
+	getPos = pos;
+	getDir = dir;
+}
+```
+```cpp
+// Camera.cpp: 1D 펄린 노이즈를 기동한 프레임 쉐이크 갱신
+float Camera::PerlinNoise1D(float x)
+{
+	int X = (int)floor(x) & 255;
+	x -= floor(x);
+	float u = Fade(x);
+	int A = hash[X];
+	int B = hash[(X + 1) & 255];
+	return Lerp(Gradient(hash[A], x), Gradient(hash[B], x - 1.0f), u);
+}
+
+void Camera::UpdateCameraShake()
+{
+	if (m_fShakeCurrent < m_fShakeDuration)
+	{
+		float shakeFactor = 1.0f - (m_fShakeCurrent / m_fShakeDuration);
+		float offsetX = PerlinNoise1D(m_fShakeCurrent * m_fShakeFrequency) * m_fShakeAmplitude * shakeFactor;
+		float offsetY = PerlinNoise1D((m_fShakeCurrent + 1000.0f) * m_fShakeFrequency) * m_fShakeAmplitude * shakeFactor;
+		TVector3 noisePos(offsetX, offsetY, 0.0f);
+		m_vPos += noisePos;
+		m_fShakeCurrent += g_fSecondPerFrame;
+	}
+}
+```
+
+---
+
+## 3. 맵 로드 및 구성
+* **파일명**: `TeamProject/GameProject/FQuadTree.cpp` (`OpenMap`)
+* **기능 개요**: 맵 에디터에서 익스포트해둔 텍스트 형식의 씬 설정 파일을 런타임 게임 클라이언트가 시작 시 직접 줄 단위 독해하여 지형 메쉬 및 다중 스플래팅 디테일 텍스처 자원을 구성함.
+* **코드 상세 분석**:
+  - `std::ifstream` 스트림을 개방해 맵 데이터 파일(`szFullPath`)을 읽고 `std::getline` 및 문자열 구분 파싱을 실행함.
+  - 베이스 지형 텍스처 명세(`m_pTexture`)와 쉼표(`,`)로 구분된 4중 스플래팅 텍스처 명세(`m_ListTextureSplatting`)를 색출하고, 텍스처 매니저(`I_Tex.Load`)를 기동하여 랜드스케이프 지형의 렌더링 텍스처 목록을 동적으로 복구 셋업함.
 
 ```cpp
 // FQuadTree.cpp: 직렬화 씬 파일 로드를 통한 랜드스케이프 및 텍스처 자원 복원
@@ -81,170 +271,52 @@ FQuadTree* OpenMap(std::wstring szFullPath, ID3D11Device* pd3dDevice, ID3D11Devi
 
 ---
 
-## 2. 쿼드트리 노드 공간 검색 및 지형 정점 선별
-* **파일명**: `TeamProject/GameProject/FQuadTree.cpp` (`SelectVertexList`)
-* **기능 개요**: 절두체 가시 영역에 활성화되어 렌더 리스트에 올라와 있는 리프 노드 목록을 탐색하여, 마우스 피킹 및 변형 브러시 반경 내의 리프 노드 범위만을 고속($O(\log N)$) 선별함.
+## 4. 안개 (Fog)
+* **파일명**: `TeamProject/GameProject/MyMain.cpp` (안개 변수 정의) / `data/shader/SSB/ScreenShader.hlsl` (안개 합성 포스트 프로세싱 픽셀 셰이더)
+* **기능 개요**: 화면 전체 렌더 포스트 프로세싱(Post-processing) 단계에서 3차원 월드 공간의 깊이/위치 버퍼 정보를 복원하여, 카메라와 픽셀 간의 거리에 따른 선형 및 지수 안개(Fog) 효과를 실시간 혼합 연산함.
 * **코드 상세 분석**:
-  - 마우스 조형 범위 상자(`T_BOX`)가 들어왔을 때, 가시 영역 내의 리프 노드 목록(`m_pDrawLeafNodeList`)을 전수 순회함.
-  - 리프 노드의 AABB 박스(`node->m_Box`)와 마우스 박스 간의 교차 판정(`TCollision::BoxToBox`) 결과 양수(`ret > 0`)가 잡히는 노드들만 `selectNodeList`에 적재함으로써 피킹 높이 연산 정점 검색 효율을 압축함.
+  - `MyMain.cpp`에 안개의 시작 거리(`g_fFogStart = 30.0f`), 끝 거리(`g_fFogEnd = 200.0f`), 그리고 안개 밀도(`g_fFogDensity = 0.001f`)를 전역 상수 정의함.
+  - 포스트 프로세싱 셰이더인 `ScreenShader.hlsl` 내부에서 깊이 맵(`PositionMap`)을 샘플링하여 픽셀의 3D 월드 좌표(`pos`)를 획득하고, 카메라와 픽셀 간의 실제 3D 거리(`fogDist = distance(currentCameraPos, pos)`)를 계산함.
+  - **선형 안개 강도**: `saturate((fogDist - linearFogStart) / (linearFogEnd - linearFogStart))` 수식을 기동함.
+  - **지수 안개 강도**: `exp(-fogDist * expFogDensity)` 수식을 기동하여 렌더링된 픽셀 색상(`ret`)과 안개 색상(`fogColor`)을 최종 가중치(`fogAmount`)로 보간 혼합(`lerp(ret, fogColor, fogAmount)`) 처리함.
 
-```cpp
-// FQuadTree.cpp: 리프 노드 AABB 충돌 검사를 통한 정점 선별 가속화
-UINT FQuadTree::SelectVertexList(T_BOX& box, std::vector<FNode*>& selectNodeList)
+```hlsl
+// ScreenShader.hlsl: 깊이/위치 맵을 이용한 선형 및 지수 안개(Fog) 실시간 혼합 셰이딩
+cbuffer constant : register(b11)
 {
-    for (auto node : m_pDrawLeafNodeList)
-    {
-        if (node != nullptr)
-        {
-            TCollisionType ret = TCollision::BoxToBox(node->m_Box, box);
-            if (ret > 0)
-            {
-                selectNodeList.push_back(node);
-            }
-        }
-    }
-    return selectNodeList.size();
-}
+	float4 currentCameraPos;
+	float linearFogStart;
+	float linearFogEnd;
+	float expFogDensity;
+};
+
+// 픽셀 셰이더 내부 안개 연산 구절
+float4 pos = PositionMap.Sample(Sampler, input.TextureUV);
+float fogDist = distance(currentCameraPos, pos);
+float linearFogAmount = saturate((fogDist - linearFogStart) / (linearFogEnd - linearFogStart));
+
+float expFogAmount = exp(-fogDist * expFogDensity);
+
+float4 fogColor = float4(0.5f, 0.5f, 0.5f, 0.2f);
+
+float fogAmount = lerp(linearFogAmount, expFogAmount, 0.0f);
+
+float4 diffuseColor = ColorMap.Sample(Sampler, input.TextureUV);
+
+float4 ret = diffuseColor * GetAmbient();
+ret += diffuseColor * GetShadowRatio(input.TextureUV) * (GetDiffuse(input.TextureUV) + GetSpecular(input.TextureUV));
+
+ret = lerp(ret, fogColor, fogAmount);
 ```
 
 ---
 
-## 3. SpringArm OBB 충돌 및 레이 피킹 장애물 회피
-* **파일명**: `TeamProject/GameProject/SpringArmCamera.cpp` (`CheckIntersectionWithMap`)
-* **기능 개요**: 3인칭 뷰 시점에서 카메라와 캐릭터 사이에 배치된 지형 지물의 OBB 영역 충돌을 탐색하고, 카메라 거리를 동적으로 차감 보정하여 시야 차단을 예방함.
+## 5. UI 전반
+* **파일명**: `TeamProject/GameLib/Interface.cpp` (`Interface::Frame`)
+* **기능 개요**: 다중 인게임 UI의 좌표 알파 변조 및 수명 상태 조율을 트리 구조(Tree Structure) 계층으로 제어하고, 독립된 기능별 비동기 업데이트 루프를 지닌 UI 프레임워크 라이프사이클을 기동함.
 * **코드 상세 분석**:
-  - 카메라의 뷰 회전 행렬을 기반으로 전방 방향 레이(`m_Select.m_Ray`)를 빌드하고, 활성화된 지형 리프 노드들과 1차 `OBBtoRay` 충돌을 고속 선별 검사함.
-  - 충돌 노드의 삼각면 인덱스 배열로부터 3차원 정점 정보(`v0, v1, v2`)를 로드하여 삼각형 정밀 교차 판정(`ChkPick`)을 가동하여 가장 가까운 장애물 교점 거리를 산출함.
-  - 이때 불필요한 주석 처리(Comment-out) 라인을 제거하여 런타임 지형 교차 검출 코드의 순수 작동 흐름만 확보함.
-
-```cpp
-// SpringArmCamera.cpp: 지형 리프 노드 OBB 및 정밀 삼각면 레이 캐스팅 검출
-bool SSB::SpringArmCamera::CheckIntersectionWithMap()
-{
-	XMMATRIX camRotationMatrix = XMMatrixRotationRollPitchYaw(-m_fCameraPitchAngle, m_fCameraYawAngle, 0);
-	XMVECTOR DefaultForward = { 0, 0, 1, 0 };
-	XMVECTOR camPosition = XMVector3TransformNormal(DefaultForward, camRotationMatrix);
-	camPosition = XMVector3Normalize(camPosition);
-
-	m_Select.m_Ray.vOrigin = m_vTarget;
-	XMStoreFloat3(&m_Select.m_Ray.vDirection, camPosition);
-	m_Select.m_Ray.vDirection.Normalize();
-
-	float distance = _kMaxDistance;
-	if (Player::GetInstance().IsUltimateSkill())
-	{
-		distance = 30;
-	}
-
-	for (auto node : _map->m_pDrawLeafNodeList)
-	{
-		if (m_Select.OBBtoRay(&node->m_Box))
-		{
-			if (node->m_Box.vMin.x > m_vPos.x || node->m_Box.vMax.x < m_vPos.x || node->m_Box.vMin.z > m_vPos.z || node->m_Box.vMax.z < m_vPos.z)
-				continue;
-			UINT index = 0;
-			UINT iNumFace = node->m_IndexList.size() / 3;
-			for (UINT face = 0; face < iNumFace; face++)
-			{
-				UINT i0 = node->m_IndexList[index + 0];
-				UINT i1 = node->m_IndexList[index + 1];
-				UINT i2 = node->m_IndexList[index + 2];
-				TVector3 v0 = _map->m_pMap->m_ListVertex[i0].pos;
-				TVector3 v1 = _map->m_pMap->m_ListVertex[i1].pos;
-				TVector3 v2 = _map->m_pMap->m_ListVertex[i2].pos;
-				if (m_Select.ChkPick(v0, v1, v2, distance))
-				{
-					return true;
-				}
-				index += 3;
-			}
-		}
-	}
-	return false;
-}
-```
-
----
-
-## 4. 이항 계수 기반 n차 베지어 곡선 카메라 연출
-* **파일명**: `TeamProject/GameProject/CameraCinema.cpp` (`MoveCameraBezierSpline`)
-* **기능 개요**: 컷신 시네마틱 궤적 구성 시 지정된 키프레임 카메라 구조체 배열(`camMoveList`)의 위치 성분값을 n차 베지어 기저 수학식으로 보간하여 일정한 컷신 이동을 산출함.
-* **코드 상세 분석**:
-  - 카메라 무빙 정보 리스트(`camMoveList`)의 크기 값을 활용해 번스타인 기저 함수 가중치를 매 프레임 계산하고, 이를 각 제어점의 XYZ 위치 성분 및 Yaw/Pitch/Roll 회전 성분값에 곱하고 가중 합산하여 카메라의 뷰/시선 좌표를 최종 보간 결정함.
-  - 사용되지 않는 쿼터니언 변조용 주석 처리 구절들을 전면 걷어내어 정돈함.
-
-```cpp
-// CameraCinema.cpp: 키프레임 구조체(CameraMove) 배열을 활용한 베지어 카메라 무빙 계산
-void CameraCinema::MoveCameraBezierSpline(float time, float duration, std::vector<CameraMove>& camMoveList, XMFLOAT3& getPos, XMFLOAT3& getDir)
-{
-	float t = time / duration;
-	int n = static_cast<int>(camMoveList.size()) - 1;
-	float u = 1.0f - t;
-	float un = pow(u, n);
-	float tn = pow(t, n);
-	XMFLOAT3 pos(0, 0, 0);
-	XMFLOAT3 dir(0, 0, 0);
-	for (int i = 0; i <= n; ++i)
-	{
-		float binomial = BinomialCoefficient(n, i);
-		float basis = binomial * pow(u, n - i) * pow(t, i);
-		pos.x += basis * camMoveList[i].camPos.x;
-		pos.y += basis * camMoveList[i].camPos.y;
-		pos.z += basis * camMoveList[i].camPos.z;
-
-		dir.x += basis * camMoveList[i].fYaw;
-		dir.y += basis * camMoveList[i].fPitch;
-		dir.z += basis * camMoveList[i].fRoll;
-	}
-
-	getPos = pos;
-	getDir = dir;
-}
-```
-
----
-
-## 5. 1D 펄린 노이즈 기반 카메라 흔들림 연출
-* **파일명**: `TeamProject/GameLib/Camera.cpp`
-* **기능 개요**: 난수(`rand`) 기반 흔들림의 불규칙 가속 한계를 대체하기 위해, 해시 테이블 참조와 기울기 보간을 통해 인과 연속성이 있는 1D 펄린 노이즈를 기동하여 카메라 진동을 구현함.
-* **코드 상세 분석**:
-  - `UpdateCameraShake` 업데이트 시, 진동 감쇄 가중치와 주파수 인자를 연계하여 `PerlinNoise1D`를 호출함. 각각 X축 및 Y축의 펄린 노이즈 진동 분포값을 샘플링하고 최종 카메라 위치 오프셋(`noisePos`)으로 대입 갱신함.
-
-```cpp
-// Camera.cpp: 1D 펄린 노이즈 수식을 활용한 연속성 있는 흔들림 카메라 변조 기작
-float Camera::PerlinNoise1D(float x)
-{
-	int X = (int)floor(x) & 255;
-	x -= floor(x);
-	float u = Fade(x);
-	int A = hash[X];
-	int B = hash[(X + 1) & 255];
-	return Lerp(Gradient(hash[A], x), Gradient(hash[B], x - 1.0f), u);
-}
-
-void Camera::UpdateCameraShake()
-{
-	if (m_fShakeCurrent < m_fShakeDuration)
-	{
-		float shakeFactor = 1.0f - (m_fShakeCurrent / m_fShakeDuration);
-		float offsetX = PerlinNoise1D(m_fShakeCurrent * m_fShakeFrequency) * m_fShakeAmplitude * shakeFactor;
-		float offsetY = PerlinNoise1D((m_fShakeCurrent + 1000.0f) * m_fShakeFrequency) * m_fShakeAmplitude * shakeFactor;
-		TVector3 noisePos(offsetX, offsetY, 0.0f);
-		m_vPos += noisePos;
-		m_fShakeCurrent += g_fSecondPerFrame;
-	}
-}
-```
-
----
-
-## 6. 비동기 InterfaceWork 프레임워크 트리 구조 UI
-* **파일명**: `TeamProject/GameLib/Interface.cpp`
-* **기능 개요**: 다수의 인게임 UI 객체의 트랜스폼/알파 연동과 비동기 트윈(Tween) 갱신 작업을 효율화하기 위해 부모-자식 노드 트리 및 InterfaceWork 라이프사이클 프레임워크를 조율함.
-* **코드 상세 분석**:
-  - `Interface::Frame()` 기동 시, 비동기 작업 관리 목록(`m_pWorkList`)을 순회하며 이미 실행 완료된 작업들을 안전하게 파괴 및 메모리 해제함.
-  - 아직 가동 중인 작업에 한해 `work->Frame(this)` 를 기동해 비동기 연출을 수행하고, 자식 노드 목록(`m_pChildList`)에 대해 순차적으로 업데이트 루프(`data->Frame()`)를 재귀 전파시킴.
-  - 이전에 걸려있던 주석 처리 코멘트 아웃 구문들을 완벽히 제거하여 코드를 가독성 있게 갱신함.
+  - `Interface::Frame()`은 현재 등록된 비동기 UI 연출 작업(`m_pWorkList`) 목록을 전수 검사하며, 실행 완료된 상태(`work->m_isDone`)인 객체들을 에디터/클라이언트 런타임 메모리에서 제거(`delete`)함.
+  - 활성화 상태인 작업들에 대해 `work->Frame(this)`을 기동하여 개별 연출을 먹이고, 자식 UI 리스트(`m_pChildList`)에 대해 순차적으로 업데이트 루프(`data->Frame()`)를 재귀 전파시켜 일괄 트랜스폼 정합을 처리함.
 
 ```cpp
 // Interface.cpp: 등록된 InterfaceWork 목록을 매 프레임 업데이트 및 트리 재귀 처리
