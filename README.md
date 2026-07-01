@@ -8,8 +8,8 @@
 * **코드 상세 분석**:
   - `GameCore::Run()`은 `CoreInit()`를 거쳐 `MyWindows::Run()` 윈도우 메시지 펌핑이 유지되는 동안 매 프레임 `CoreFrame()` 과 `CoreRender()` 를 가동하는 윈도우 루프를 기동함.
   - `CoreFrame()`은 키보드/마우스 입력(`I_Input.Frame()`), 시간 누적(`I_Timer.Frame()`), 텍스트 라이터(`g_pWriter->Frame()`)를 갱신한 뒤, 가상 함수 오버라이딩에 의해 `MyMain::Frame()`을 호출함.
-  - `MyMain::Frame()`에서는 포스트 프로세싱 MRT 자원(`m_MRT.Frame()`), 화면 스크린(`m_screen.Frame()`)을 처리하고, 씬 매니저인 `I_Scene.Frame()`을 기동해 인게임 월드의 상태 머신을 업데이트함.
-  - `MyMain::Render()`에서는 광원별 그림자 깊이 맵 연산(`light->PreRender()`)과 MRT 렌더링을 순차 기동하고 최종적으로 현재 활성화된 씬(`I_Scene.Render()`)의 드로우콜을 화면에 렌더링함.
+  - `MyMain::Frame()`에서는 포스트 프로세싱 MRT 자원(`m_MRT.Frame()`), 화면 스크린(`m_screen.Frame()`), 그리고 핵심 **`I_Scene.Frame()`** 씬 매니저를 기동해 인게임 월드의 상태 머신을 업데이트함.
+  - `MyMain::Render()`에서는 광원별 그림자 깊이 맵 연산(`light->PreRender()`)과 MRT 렌더를 순차 기동하고 최종적으로 현재 활성화된 씬(`I_Scene.Render()`)의 드로우콜을 화면에 렌더링함.
 
 ```cpp
 // GameCore.cpp: Win32 메시지 펌핑 기반 무한 루프 및 매 프레임 업데이트 기동
@@ -50,7 +50,7 @@ bool	GameCore::CoreFrame()
 ```
 ```cpp
 // MyMain.cpp: 씬(Scene) 매니저 업데이트 및 MRT 그림자 깊이 렌더링 흐름 조율
-bool    MyMain::Frame()
+bool MyMain::Frame()
 {
     if (I_Input.GetKey(VK_ESCAPE) == KEY_PUSH)
         m_bGameRun = false;
@@ -63,7 +63,7 @@ bool    MyMain::Frame()
     return true;
 }
 
-bool    MyMain::Render()
+bool MyMain::Render()
 {
     {
         auto lights = SSB::I_Light.GetLightList();
@@ -195,7 +195,7 @@ void Camera::UpdateCameraShake()
 
 ## 3. 맵 로드 및 구성
 * **파일명**: `TeamProject/GameProject/FQuadTree.cpp` (`OpenMap`)
-* **기능 개요**: 맵 에디터에서 익스포트해둔 텍스트 형식의 씬 설정 파일을 런타임 게임 클라이언트가 시작 시 직접 줄 단위 독해하여 지형 메쉬 및 다중 스플래팅 디테일 텍스처 자원을 구성함.
+* **기능 개요**: 맵 에디터에서 익스포트해둔 텍스트 형식의 씬 배치 설정 파일을 런타임 게임 클라이언트가 시작 시 직접 줄 단위 독해하여 지형 메쉬 및 다중 스플래팅 디테일 텍스처 자원을 구성함.
 * **코드 상세 분석**:
   - `std::ifstream` 스트림을 개방해 맵 데이터 파일(`szFullPath`)을 읽고 `std::getline` 및 문자열 구분 파싱을 실행함.
   - 베이스 지형 텍스처 명세(`m_pTexture`)와 쉼표(`,`)로 구분된 4중 스플래팅 텍스처 명세(`m_ListTextureSplatting`)를 색출하고, 텍스처 매니저(`I_Tex.Load`)를 기동하여 랜드스케이프 지형의 렌더링 텍스처 목록을 동적으로 복구 셋업함.
@@ -277,8 +277,8 @@ FQuadTree* OpenMap(std::wstring szFullPath, ID3D11Device* pd3dDevice, ID3D11Devi
 * **코드 상세 분석**:
   - `MyMain.cpp`에 안개의 시작 거리(`g_fFogStart = 30.0f`), 끝 거리(`g_fFogEnd = 200.0f`), 그리고 안개 밀도(`g_fFogDensity = 0.001f`)를 전역 상수 정의함.
   - 포스트 프로세싱 셰이더인 `ScreenShader.hlsl` 내부에서 깊이 맵(`PositionMap`)을 샘플링하여 픽셀의 3D 월드 좌표(`pos`)를 획득하고, 카메라와 픽셀 간의 실제 3D 거리(`fogDist = distance(currentCameraPos, pos)`)를 계산함.
-  - **선형 안개 강도**: `saturate((fogDist - linearFogStart) / (linearFogEnd - linearFogStart))` 수식을 기동함.
-  - **지수 안개 강도**: `exp(-fogDist * expFogDensity)` 수식을 기동하여 렌더링된 픽셀 색상(`ret`)과 안개 색상(`fogColor`)을 최종 가중치(`fogAmount`)로 보간 혼합(`lerp(ret, fogColor, fogAmount)`) 처리함.
+  - **선형 안개 강도**: `saturate((fogDist - linearFogStart) / (linearFogEnd - linearFogStart))`를 구함.
+  - **지수 안개 강도**: `exp(-fogDist * expFogDensity)`를 산출하여 안개 가중치(`fogAmount`)로 픽셀 색상과 회색 안개색을 보간 합성(`lerp(ret, fogColor, fogAmount)`) 렌더링함.
 
 ```hlsl
 // ScreenShader.hlsl: 깊이/위치 맵을 이용한 선형 및 지수 안개(Fog) 실시간 혼합 셰이딩
@@ -312,11 +312,19 @@ ret = lerp(ret, fogColor, fogAmount);
 ---
 
 ## 5. UI 전반
-* **파일명**: `TeamProject/GameLib/Interface.cpp` (`Interface::Frame`)
-* **기능 개요**: 다중 인게임 UI의 좌표 알파 변조 및 수명 상태 조율을 트리 구조(Tree Structure) 계층으로 제어하고, 독립된 기능별 비동기 업데이트 루프를 지닌 UI 프레임워크 라이프사이클을 기동함.
+* **파일명**: `TeamProject/GameLib/Interface.cpp` (`Interface::Frame` 및 파생 클래스들의 `Frame` / `Render`) / `TeamProject/GameLib/Interface.h`
+* **기능 개요**: 계층적 트리 구조 배치 기반의 UI 프레임워크 상에서, 각각 독립된 런타임 수명 주기를 갖는 애니메이션/트윈 컴포넌트(`InterfaceWork`)를 가동하여 클릭 변동 스케일 모션, 페이딩, 게이지바 보간, 플로팅 텍스트 렌더링, 시계 방향 스킬 쿨타임 마스크 연출 등을 일괄 동기화 처리함.
 * **코드 상세 분석**:
-  - `Interface::Frame()`은 현재 등록된 비동기 UI 연출 작업(`m_pWorkList`) 목록을 전수 검사하며, 실행 완료된 상태(`work->m_isDone`)인 객체들을 에디터/클라이언트 런타임 메모리에서 제거(`delete`)함.
-  - 활성화 상태인 작업들에 대해 `work->Frame(this)`을 기동하여 개별 연출을 먹이고, 자식 UI 리스트(`m_pChildList`)에 대해 순차적으로 업데이트 루프(`data->Frame()`)를 재귀 전파시켜 일괄 트랜스폼 정합을 처리함.
+  - **UI 구조 트리 전파 (`Interface::Frame`)**:
+    부모-자식 트리 구조 UI를 전수 순회하며 비동기 작업 수명이 끝난 완료 객체(`work->m_isDone`)를 런타임 메모리에서 안전하게 파괴(`delete`) 해제하고, 하위 자식 목록(`m_pChildList`)에 대해 갱신 프레임(`data->Frame()`)을 재귀 전파시켜 위치 좌표 및 알파를 일괄 조율함.
+  - **마우스 호버/클릭 상태 동적 스케일 (`InterfaceClick`)**:
+    마우스 포인터 좌표(`I_Input.m_ptPos`)와 UI 사각형 경계(`TRectangle rect`)의 충돌 교차 판정(`rect.IntersectPoint`)을 기동하여, Hover/Push 시 UI 스케일 크기(`m_vScale`)를 1.1배 혹은 0.9배로 부드럽게 증감 변동 연출함.
+  - **비동기 HP/게이지바 보간 (`InterfaceSetGage`)**:
+    데미지 핏 등의 소요율 `m_fGage` 값에 맞춰 매 프레임 경과 시간 비율 `t = 1.0f - m_fRemain / m_fDuration` 만큼 정점 텍스처 좌표(`t.x`)를 선형 보간하여 HP/Gage바를 매끄럽게 갱신함.
+  - **데미지 플로팅 텍스트 드로잉 (`InterfaceDamageFloating`)**:
+    타격한 몹의 Damage 수치값을 텍스트 변환하여 매칭 폰트 리스트(`m_Damage`)를 로드하고, 경과 시간에 비례해 위쪽으로 띄워 올리는 변위(`m_fFloatLength * (1.0f - m_fRemain / m_fDuration)`)를 버텍스 리스트 좌표에 누적 적용하여 실시간 동적 플로팅 데미지를 월드에 렌더링함.
+  - **시계방향 스킬 쿨타임 각도 파라미터 연동 (`InterfaceFadeClockwise`)**:
+    스킬 시전 시 쿨타임 마스크의 각도를 `pInter->m_cbData.fTimer = 360.0f * m_fCurrent / m_fTime` 수식으로 계산하여 상수 버퍼에 탑재함으로써 픽셀 셰이더가 쿨타임 각도를 discard 처리할 수 있도록 변조 각도를 동적 산출함.
 
 ```cpp
 // Interface.cpp: 등록된 InterfaceWork 목록을 매 프레임 업데이트 및 트리 재귀 처리
@@ -348,4 +356,113 @@ bool Interface::Frame()
 
 	return true;
 }
+```
+```cpp
+// Interface.h: InterfaceClick, InterfaceDamageFloating 등의 비동기 트윈 기작 C++ 실제 소스코드
+class InterfaceClick : public InterfaceWork
+{
+public:
+	bool Frame(Interface* pInter)
+	{
+		POINT ptMouse = I_Input.m_ptPos;
+		pInter->m_vScale = TVector3(m_fScale);
+
+		TVector3 pos = pInter->m_vPos;
+		long width = pInter->m_pTexture->m_Desc.Width;
+		long height = pInter->m_pTexture->m_Desc.Height;
+
+		TRectangle rect = { (long)pos.x, (long)pos.y, width, height };
+		if (rect.IntersectPoint(ptMouse))
+		{
+			pInter->m_CurrentState = UI_HOVER;
+			pInter->m_vScale = TVector3(m_fScale * 1.1f);
+			if (I_Input.GetKey(VK_LBUTTON) == KEY_PUSH ||
+				I_Input.GetKey(VK_LBUTTON) == KEY_HOLD)
+			{
+				pInter->m_CurrentState = UI_PUSH;
+				pInter->m_vScale = TVector3(m_fScale * 0.9f);
+			}
+			if (I_Input.GetKey(VK_LBUTTON) == KEY_UP)
+			{
+				pInter->m_CurrentState = UI_SELECT;
+			}
+		}
+		else
+		{
+			pInter->m_CurrentState = UI_NORMAL;
+		}
+		pInter->SetFrame(pInter->m_CurrentState);
+		return true;
+	}
+
+public:
+	InterfaceClick(float fScale)
+	{
+		m_fScale = fScale;
+	}
+public:
+	float	m_fScale;
+};
+
+class InterfaceDamageFloating : public InterfaceWork
+{
+public:
+	bool	Frame(Interface* pInter) override
+	{
+		m_fRemain -= g_fSecondPerFrame;
+		m_fAlpha = m_fRemain / m_fDuration;
+		if (m_fRemain <= 0.0f)
+		{
+			m_isDone = true;
+		}
+		for (int i = 0; i < pInter->m_VertexList.size(); i++)
+		{
+			pInter->m_VertexList[i].c.w = m_fAlpha;
+		}
+		return true;
+	}
+
+	bool	Render(Interface* pInter) override
+	{
+		pInter->m_VertexList[0].p.x = -m_fDamageSize / 2.0f;
+		pInter->m_VertexList[0].p.y = m_Damage[0].m_v1 / 2.0f + (m_fFloatLength * (1.0f - m_fRemain / m_fDuration));
+		for (int idx = 0; idx < m_Damage.size(); idx++)
+		{
+			float width = m_Damage[idx].m_u1;
+			float height = m_Damage[idx].m_v1;
+
+			pInter->m_VertexList[1].p.x = pInter->m_VertexList[0].p.x + width;
+			pInter->m_VertexList[1].p.y = pInter->m_VertexList[0].p.y;
+
+			pInter->m_VertexList[2].p.x = pInter->m_VertexList[0].p.x;
+			pInter->m_VertexList[2].p.y = pInter->m_VertexList[0].p.y - height;
+
+			pInter->m_VertexList[3].p.x = pInter->m_VertexList[1].p.x;
+			pInter->m_VertexList[3].p.y = pInter->m_VertexList[2].p.y;
+
+			float descWidth = (float)pInter->m_pTexture->m_Desc.Width;
+			float descHeight = (float)pInter->m_pTexture->m_Desc.Height;
+
+			pInter->m_VertexList[0].t.x = m_Damage[idx].m_u0 / descWidth;
+			pInter->m_VertexList[0].t.y = m_Damage[idx].m_v0 / descHeight;
+
+			pInter->m_VertexList[1].t.x = (m_Damage[idx].m_u0 + m_Damage[idx].m_u1) / descWidth;
+			pInter->m_VertexList[1].t.y = pInter->m_VertexList[0].t.y;
+
+			pInter->m_VertexList[2].t.x = pInter->m_VertexList[0].t.x;
+			pInter->m_VertexList[2].t.y = (m_Damage[idx].m_v0 + m_Damage[idx].m_v1) / descHeight;
+
+			pInter->m_VertexList[3].t.x = pInter->m_VertexList[1].t.x;
+			pInter->m_VertexList[3].t.y = pInter->m_VertexList[2].t.y;
+
+			pInter->UpdateVertexBuffer();
+			pInter->UpdateConstantBuffer();
+			pInter->Interface::Render();
+			pInter->m_VertexList[0].p.x = pInter->m_VertexList[1].p.x;
+		}
+
+		return true;
+	}
+    // ... 생략 ...
+};
 ```
